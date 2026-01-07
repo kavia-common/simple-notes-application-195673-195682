@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,6 +16,32 @@ openapi_tags = [
     },
 ]
 
+
+def _parse_cors_allow_origins() -> list[str]:
+    """
+    Resolve allowed CORS origins from environment.
+
+    Priority:
+    1) CORS_ALLOW_ORIGINS: comma-separated list of allowed origins
+       Example: "http://localhost:3000,https://my-frontend.example.com"
+    2) FRONTEND_URL: single frontend origin
+       Example: "https://my-frontend.example.com"
+    3) Default to local dev server.
+
+    Note: In Kavia environments the frontend origin is typically NOT localhost,
+    so this needs to be configurable to avoid browser CORS failures.
+    """
+    raw = (os.getenv("CORS_ALLOW_ORIGINS") or "").strip()
+    if raw:
+        return [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
+
+    frontend_url = (os.getenv("FRONTEND_URL") or "").strip().rstrip("/")
+    if frontend_url:
+        return [frontend_url]
+
+    return ["http://localhost:3000"]
+
+
 app = FastAPI(
     title="Notes Backend API",
     description="FastAPI backend for a simple notes application using MongoDB.",
@@ -21,11 +49,10 @@ app = FastAPI(
     openapi_tags=openapi_tags,
 )
 
-# Allow the React dev server.
-# If you deploy the frontend elsewhere, add that origin (or set a proper env-driven allowlist).
+# Allow configured frontend origins (default to local dev server).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=_parse_cors_allow_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
